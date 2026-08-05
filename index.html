@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>月面基地 通信システム</title>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    body {
+      background: #030712;
+      color: #00f3ff;
+      font-family: 'Courier New', monospace;
+      text-align: center;
+      margin: 0;
+      padding: 15px;
+      background-image: 
+        radial-gradient(white, rgba(255,255,255,.2) 2px, transparent 40px),
+        radial-gradient(white, rgba(255,255,255,.15) 1px, transparent 30px);
+      background-size: 550px 550px;
+      background-position: 0 0, 200px 200px;
+    }
+    .header {
+      font-size: 26px;
+      font-weight: bold;
+      letter-spacing: 3px;
+      text-shadow: 0 0 10px #00f3ff;
+      border-bottom: 2px solid #00f3ff;
+      padding-bottom: 10px;
+      margin-bottom: 15px;
+    }
+    .status-box { font-size: 15px; color: #ffb700; margin-bottom: 15px; }
+    
+    /* 遅延時間選択コントロール */
+    .delay-control {
+      background: rgba(10, 25, 47, 0.8);
+      border: 1px solid #00f3ff;
+      border-radius: 8px;
+      padding: 10px;
+      margin: 10px auto 20px;
+      max-width: 600px;
+    }
+    .delay-control label { font-size: 14px; margin-right: 10px; }
+    .btn-delay {
+      background: #0a192f;
+      color: #00f3ff;
+      border: 1px solid #00f3ff;
+      padding: 6px 12px;
+      font-size: 14px;
+      cursor: pointer;
+      border-radius: 4px;
+      margin: 2px;
+    }
+    .btn-delay.active {
+      background: #00f3ff;
+      color: #030712;
+      font-weight: bold;
+      box-shadow: 0 0 8px #00f3ff;
+    }
+
+    .main-container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
+    .video-card {
+      background: rgba(10, 25, 47, 0.9);
+      border: 2px solid #00f3ff;
+      border-radius: 10px;
+      padding: 15px;
+      width: 45%;
+      min-width: 300px;
+      box-shadow: 0 0 15px rgba(0,243,255,0.2);
+      box-sizing: border-box;
+    }
+    
+    /* 月面背景風ビデオフレーム */
+    .video-frame {
+      position: relative;
+      width: 100%;
+      background: #000;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    /* 月面クレーター風バックグラウンドグラフィック */
+    .moon-bg {
+      background: 
+        radial-gradient(circle at 20% 80%, #3a3d40 0%, transparent 20%),
+        radial-gradient(circle at 70% 60%, #2a2c2e 0%, transparent 25%),
+        radial-gradient(circle at 40% 30%, #1d1e20 0%, transparent 15%),
+        linear-gradient(to bottom, #050b14 0%, #111418 100%);
+    }
+    video { width: 100%; display: block; }
+    
+    /* 映像上のSF風オーバーレイ表示 */
+    .overlay-text {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      background: rgba(0,0,0,0.6);
+      padding: 2px 6px;
+      font-size: 11px;
+      border-radius: 3px;
+      color: #00f3ff;
+      pointer-events: none;
+    }
+
+    #qrcode {
+      display: flex;
+      justify-content: center;
+      margin: 15px auto;
+      background: #fff;
+      padding: 10px;
+      border-radius: 5px;
+      width: fit-content;
+    }
+    .btn {
+      background: #00f3ff;
+      color: #030712;
+      font-weight: bold;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 5px;
+      margin: 10px;
+    }
+    .btn:hover { background: #fff; box-shadow: 0 0 10px #00f3ff; }
+  </style>
+</head>
+<body>
+
+  <div class="header">🌕 月面基地 通信指令室 (LUNAR BASE)</div>
+  <div id="status" class="status-box">システム初期化中...「通信起動」を押してください</div>
+
+  <!-- 遅延時間設定パネル -->
+  <div class="delay-control">
+    <label>⏱️ 通信遅延（タイムラグ）設定:</label>
+    <button class="btn-delay active" onclick="setDelay(3, this)">3秒 (月面)</button>
+    <button class="btn-delay" onclick="setDelay(5, this)">5秒 (月面遠隔)</button>
+    <button class="btn-delay" onclick="setDelay(10, this)">10秒 (火星近心)</button>
+    <button class="btn-delay" onclick="setDelay(20, this)">20秒 (火星標準)</button>
+  </div>
+
+  <button class="btn" onclick="initHost()">📡 月面基地（親機）として通信開始</button>
+
+  <div id="qr-section" style="display:none;">
+    <p>【保護者のスマホで以下のQRコードを読み取ってください】</p>
+    <div id="qrcode"></div>
+  </div>
+
+  <div class="main-container">
+    <div class="video-card">
+      <h3>【月面基地（自分）のカメラ】</h3>
+      <div class="video-frame moon-bg">
+        <div class="overlay-text">LUNAR CAM 01 // LIVE</div>
+        <video id="localVideo" autoplay playsinline muted></video>
+      </div>
+    </div>
+    <div class="video-card">
+      <h3 id="remote-title">【地球（相手）からの映像 - 3秒遅延】</h3>
+      <div class="video-frame">
+        <div class="overlay-text" id="delay-tag">DELAY: 3.0s</div>
+        <video id="remoteVideo" autoplay playsinline></video>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let peer, localStream;
+    let delaySeconds = 3.0; // デフォルト遅延3秒
+
+    function setDelay(sec, btn) {
+      delaySeconds = sec;
+      document.querySelectorAll('.btn-delay').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      document.getElementById('delay-tag').innerText = `DELAY: ${sec}.0s`;
+      document.getElementById('remote-title').innerText = `【地球（相手）からの映像 - ${sec}秒遅延】`;
+      
+      const status = document.getElementById('status');
+      if (status) status.innerText = `通信遅延を ${sec} 秒に変更しました`;
+    }
+
+    async function initHost() {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        document.getElementById('localVideo').srcObject = localStream;
+        document.getElementById('status').innerText = "通信ID発行中...";
+
+        peer = new Peer();
+
+        peer.on('open', (id) => {
+          document.getElementById('status').innerText = "🟢 月面基地準備完了！スマホでQRコードを読み取ってください";
+          document.getElementById('qr-section').style.display = 'block';
+
+          const clientUrl = `${location.protocol}//${location.host}${location.pathname}?join=${id}&delay=${delaySeconds}`;
+          document.getElementById("qrcode").innerHTML = "";
+          new QRCode(document.getElementById("qrcode"), { text: clientUrl, width: 160, height: 160 });
+        });
+
+        // スマホからの着信処理
+        peer.on('call', (call) => {
+          document.getElementById('status').innerText = `📡 地球からの通信を受信中...（${delaySeconds}秒遅延適用）`;
+          call.answer(localStream);
+
+          call.on('stream', (remoteStream) => {
+            setupDelayedStream(remoteStream, 'remoteVideo');
+          });
+        });
+
+      } catch (err) {
+        alert("カメラ/マイクの許可が必要です: " + err);
+      }
+    }
+
+    // 遅延バッファ処理
+    function setupDelayedStream(stream, videoElementId) {
+      const recorder = new MediaRecorder(stream);
+      let chunks = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunks.push(e.data);
+          const blob = new Blob(chunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          
+          setTimeout(() => {
+            const vid = document.getElementById(videoElementId);
+            vid.src = url;
+          }, delaySeconds * 1000);
+        }
+      };
+      recorder.start(200);
+    }
+
+    // スマホ（子機）として開かれた場合の画面構築
+    window.onload = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const joinId = urlParams.get('join');
+      const paramDelay = urlParams.get('delay');
+
+      if (paramDelay) {
+        delaySeconds = parseFloat(paramDelay);
+      }
+
+      if (joinId) {
+        document.body.innerHTML = `
+          <div class="header">🌍 地球通信局 (EARTH STATION)</div>
+          <div id="status" class="status-box">月面基地へ接続準備中...</div>
+          <button class="btn" onclick="connectToMoon('${joinId}')">🚀 月面へ接続開始</button>
+          <div class="main-container">
+            <div class="video-card" style="width:90%;">
+              <h3>【月面からの映像 - ${delaySeconds}秒遅延】</h3>
+              <div class="video-frame moon-bg">
+                <div class="overlay-text">LUNAR BASE RELAY // DELAY: ${delaySeconds}s</div>
+                <video id="remoteVideo" autoplay playsinline></video>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    };
+
+    async function connectToMoon(hostId) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const mobilePeer = new Peer();
+
+        mobilePeer.on('open', () => {
+          document.getElementById('status').innerText = "📡 月面基地へ送信中...";
+          const call = mobilePeer.call(hostId, stream);
+
+          call.on('stream', (remoteStream) => {
+            setupDelayedStream(remoteStream, 'remoteVideo');
+          });
+        });
+      } catch(e) {
+        alert("スマホのカメラ・マイクの許可が必要です: " + e);
+      }
+    }
+  </script>
+</body>
+</html>
