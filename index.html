@@ -132,7 +132,6 @@
     <button class="btn-delay active" onclick="setDelay(3, this)">3秒 (月面)</button>
     <button class="btn-delay" onclick="setDelay(5, this)">5秒 (月面遠隔)</button>
     <button class="btn-delay" onclick="setDelay(10, this)">10秒 (火星近心)</button>
-    <button class="btn-delay" onclick="setDelay(20, this)">20秒 (火星標準)</button>
   </div>
 
   <button class="btn" onclick="initHost()">📡 月面基地（親機）として通信開始</button>
@@ -151,9 +150,12 @@
       </div>
     </div>
     <div class="video-card">
-      <h3 id="remote-title">【地球（相手）からの映像】</h3>
+      <h3 id="remote-title">【地球（相手）からの映像 - 3秒遅延】</h3>
       <div class="panel-frame" style="background:#000;">
-        <video id="remoteVideo" style="width:100%; height:100%; object-fit:cover;" autoplay playsinline></video>
+        <!-- 遅延描画用のキャンバス -->
+        <canvas id="delayCanvas" style="width:100%; height:100%; object-fit:cover;"></canvas>
+        <!-- 非表示の受信用ビデオ -->
+        <video id="remoteVideo" style="display:none;" autoplay playsinline></video>
       </div>
     </div>
   </div>
@@ -161,6 +163,8 @@
   <script>
     let peer, localStream;
     let delaySeconds = 3.0;
+    let frameBuffer = [];
+    let isDelayRunning = false;
 
     const peerConfig = {
       config: {
@@ -173,11 +177,11 @@
 
     function setDelay(sec, btn) {
       delaySeconds = sec;
+      frameBuffer = []; // バッファリセット
       document.querySelectorAll('.btn-delay').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       
       document.getElementById('remote-title').innerText = `【地球（相手）からの映像 - ${sec}秒遅延】`;
-      
       const status = document.getElementById('status');
       if (status) status.innerText = `通信遅延を ${sec} 秒に変更しました`;
     }
@@ -200,13 +204,14 @@
         });
 
         peer.on('call', (call) => {
-          document.getElementById('status').innerText = "📡 接続成功！通信中...";
+          document.getElementById('status').innerText = `📡 通信接続！ (${delaySeconds}秒のタイムラグ発生中)`;
           call.answer(localStream);
 
           call.on('stream', (remoteStream) => {
-            // 直接映像を表示させてフリーズを回避
             const vid = document.getElementById('remoteVideo');
             vid.srcObject = remoteStream;
+            vid.play();
+            startDelayProcess('remoteVideo', 'delayCanvas');
           });
         });
 
@@ -215,14 +220,51 @@
       }
     }
 
+    // 映像コマ（フレーム）を蓄積して遅延表示する処理
+    function startDelayProcess(videoCtxId, canvasId) {
+      if (isDelayRunning) return;
+      isDelayRunning = true;
+
+      const video = document.getElementById(videoCtxId);
+      const canvas = document.getElementById(canvasId);
+      const ctx = canvas.getContext('2d');
+
+      const processFrame = () => {
+        if (video.videoWidth > 0) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+
+          // 一時キャンバスに現在のコマを描画
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = video.videoWidth;
+          tempCanvas.height = video.videoHeight;
+          const tempCtx = tempCanvas.getContext('2d');
+          tempCtx.drawImage(video, 0, 0);
+
+          // コマと時刻を配列に保存
+          frameBuffer.push({
+            time: Date.now(),
+            image: tempCanvas
+          });
+
+          // 設定秒数より古いコマを取り出して画面に描画
+          const targetTime = Date.now() - (delaySeconds * 1000);
+          while (frameBuffer.length > 0 && frameBuffer[0].time <= targetTime) {
+            const frame = frameBuffer.shift();
+            ctx.drawImage(frame.image, 0, 0);
+          }
+        }
+        requestAnimationFrame(processFrame);
+      };
+      requestAnimationFrame(processFrame);
+    }
+
     window.onload = () => {
       const urlParams = new URLSearchParams(window.location.search);
       const joinId = urlParams.get('join');
       const paramDelay = urlParams.get('delay');
 
-      if (paramDelay) {
-        delaySeconds = parseFloat(paramDelay);
-      }
+      if (paramDelay) delaySeconds = parseFloat(paramDelay);
 
       if (joinId) {
         document.body.innerHTML = `
@@ -231,9 +273,10 @@
           <button class="btn" onclick="connectToMoon('${joinId}')">🚀 月面へ接続開始</button>
           <div class="main-container">
             <div class="video-card" style="width:90%;">
-              <h3>【月面宇宙飛行士からの映像】</h3>
+              <h3>【月面宇宙飛行士からの映像 - ${delaySeconds}秒遅延】</h3>
               <div class="panel-frame">
-                <video id="remoteVideo" class="face-video" autoplay playsinline></video>
+                <canvas id="delayCanvas" class="face-video"></canvas>
+                <video id="remoteVideo" style="display:none;" autoplay playsinline></video>
                 <img src="astronaut.png" class="astronaut-img" alt="宇宙飛行士">
               </div>
             </div>
@@ -248,13 +291,15 @@
         const mobilePeer = new Peer(peerConfig);
 
         mobilePeer.on('open', () => {
-          document.getElementById('status').innerText = "📡 接続中...";
+          document.getElementById('status').innerText = "📡 送信中...";
           const call = mobilePeer.call(hostId, stream);
 
           call.on('stream', (remoteStream) => {
-            document.getElementById('status').innerText = "🟢 月面基地と接続しました！";
+            document.getElementById('status').innerText = `🟢 月面基地と接続完了！ (${delaySeconds}秒遅延中)`;
             const vid = document.getElementById('remoteVideo');
             vid.srcObject = remoteStream;
+            vid.play();
+            startDelayProcess('remoteVideo', 'delayCanvas');
           });
         });
       } catch(e) {
