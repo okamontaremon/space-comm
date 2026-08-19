@@ -14,11 +14,6 @@
       text-align: center;
       margin: 0;
       padding: 15px;
-      background-image: 
-        radial-gradient(white, rgba(255,255,255,.2) 2px, transparent 40px),
-        radial-gradient(white, rgba(255,255,255,.15) 1px, transparent 30px);
-      background-size: 550px 550px;
-      background-position: 0 0, 200px 200px;
     }
     .header {
       font-size: 26px;
@@ -31,7 +26,6 @@
     }
     .status-box { font-size: 15px; color: #ffb700; margin-bottom: 15px; }
     
-    /* 遅延時間選択コントロール */
     .delay-control {
       background: rgba(10, 25, 47, 0.8);
       border: 1px solid #00f3ff;
@@ -65,40 +59,51 @@
       border-radius: 10px;
       padding: 15px;
       width: 45%;
-      min-width: 300px;
+      min-width: 320px;
       box-shadow: 0 0 15px rgba(0,243,255,0.2);
       box-sizing: border-box;
     }
     
-    /* 月面背景風ビデオフレーム */
-    .video-frame {
+    /* -------------------------------------------------- */
+    /* オリジナル画像を使った「顔はめパネル」コンテナ */
+    /* -------------------------------------------------- */
+    .panel-frame {
       position: relative;
       width: 100%;
-      background: #000;
-      border-radius: 5px;
+      aspect-ratio: 4/3;
       overflow: hidden;
+      border-radius: 8px;
+      /* 月面背景画像を敷く */
+      background-image: url('moon.png');
+      background-size: cover;
+      background-position: center;
     }
-    /* 月面クレーター風バックグラウンドグラフィック */
-    .moon-bg {
-      background: 
-        radial-gradient(circle at 20% 80%, #3a3d40 0%, transparent 20%),
-        radial-gradient(circle at 70% 60%, #2a2c2e 0%, transparent 25%),
-        radial-gradient(circle at 40% 30%, #1d1e20 0%, transparent 15%),
-        linear-gradient(to bottom, #050b14 0%, #111418 100%);
-    }
-    video { width: 100%; display: block; }
-    
-    /* 映像上のSF風オーバーレイ表示 */
-    .overlay-text {
+
+    /* 宇宙飛行士のイラスト */
+    .astronaut-img {
       position: absolute;
-      top: 8px;
-      left: 8px;
-      background: rgba(0,0,0,0.6);
-      padding: 2px 6px;
-      font-size: 11px;
-      border-radius: 3px;
-      color: #00f3ff;
+      bottom: -10%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 85%;
+      height: auto;
+      z-index: 1;
       pointer-events: none;
+    }
+
+    /* ヘルメットのバイザー（オレンジ部分）に重なる丸型カメラ映像 */
+    .face-video {
+      position: absolute;
+      /* バイザーの位置調整 */
+      top: 23%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 46%;
+      height: 38%;
+      object-fit: cover;
+      border-radius: 50% / 45%; /* バイザーに合わせて少し横長の楕円に */
+      z-index: 2; /* イラストの上に重ねる */
+      box-shadow: inset 0 0 10px rgba(0,0,0,0.6);
     }
 
     #qrcode {
@@ -129,7 +134,6 @@
   <div class="header">🌕 月面基地 通信指令室 (LUNAR BASE)</div>
   <div id="status" class="status-box">システム初期化中...「通信起動」を押してください</div>
 
-  <!-- 遅延時間設定パネル -->
   <div class="delay-control">
     <label>⏱️ 通信遅延（タイムラグ）設定:</label>
     <button class="btn-delay active" onclick="setDelay(3, this)">3秒 (月面)</button>
@@ -147,31 +151,40 @@
 
   <div class="main-container">
     <div class="video-card">
-      <h3>【月面基地（自分）のカメラ】</h3>
-      <div class="video-frame moon-bg">
-        <div class="overlay-text">LUNAR CAM 01 // LIVE</div>
-        <video id="localVideo" autoplay playsinline muted></video>
+      <h3>【月面パイロット (自分)】</h3>
+      <div class="panel-frame">
+        <!-- バイザーの位置にカメラ映像を丸く重ねる -->
+        <video id="localVideo" class="face-video" autoplay playsinline muted></video>
+        <!-- 宇宙飛行士のイラスト -->
+        <img src="astronaut.png" class="astronaut-img" alt="宇宙飛行士">
       </div>
     </div>
     <div class="video-card">
       <h3 id="remote-title">【地球（相手）からの映像 - 3秒遅延】</h3>
-      <div class="video-frame">
-        <div class="overlay-text" id="delay-tag">DELAY: 3.0s</div>
-        <video id="remoteVideo" autoplay playsinline></video>
+      <div class="panel-frame" style="background:#000;">
+        <video id="remoteVideo" style="width:100%; height:100%; object-fit:cover;" autoplay playsinline></video>
       </div>
     </div>
   </div>
 
   <script>
     let peer, localStream;
-    let delaySeconds = 3.0; // デフォルト遅延3秒
+    let delaySeconds = 3.0;
+
+    const peerConfig = {
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      }
+    };
 
     function setDelay(sec, btn) {
       delaySeconds = sec;
       document.querySelectorAll('.btn-delay').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       
-      document.getElementById('delay-tag').innerText = `DELAY: ${sec}.0s`;
       document.getElementById('remote-title').innerText = `【地球（相手）からの映像 - ${sec}秒遅延】`;
       
       const status = document.getElementById('status');
@@ -184,7 +197,7 @@
         document.getElementById('localVideo').srcObject = localStream;
         document.getElementById('status').innerText = "通信ID発行中...";
 
-        peer = new Peer();
+        peer = new Peer(peerConfig);
 
         peer.on('open', (id) => {
           document.getElementById('status').innerText = "🟢 月面基地準備完了！スマホでQRコードを読み取ってください";
@@ -195,7 +208,6 @@
           new QRCode(document.getElementById("qrcode"), { text: clientUrl, width: 160, height: 160 });
         });
 
-        // スマホからの着信処理
         peer.on('call', (call) => {
           document.getElementById('status').innerText = `📡 地球からの通信を受信中...（${delaySeconds}秒遅延適用）`;
           call.answer(localStream);
@@ -210,7 +222,6 @@
       }
     }
 
-    // 遅延バッファ処理
     function setupDelayedStream(stream, videoElementId) {
       const recorder = new MediaRecorder(stream);
       let chunks = [];
@@ -230,7 +241,6 @@
       recorder.start(200);
     }
 
-    // スマホ（子機）として開かれた場合の画面構築
     window.onload = () => {
       const urlParams = new URLSearchParams(window.location.search);
       const joinId = urlParams.get('join');
@@ -247,10 +257,10 @@
           <button class="btn" onclick="connectToMoon('${joinId}')">🚀 月面へ接続開始</button>
           <div class="main-container">
             <div class="video-card" style="width:90%;">
-              <h3>【月面からの映像 - ${delaySeconds}秒遅延】</h3>
-              <div class="video-frame moon-bg">
-                <div class="overlay-text">LUNAR BASE RELAY // DELAY: ${delaySeconds}s</div>
-                <video id="remoteVideo" autoplay playsinline></video>
+              <h3>【月面宇宙飛行士からの映像 - ${delaySeconds}秒遅延】</h3>
+              <div class="panel-frame">
+                <video id="remoteVideo" class="face-video" autoplay playsinline></video>
+                <img src="astronaut.png" class="astronaut-img" alt="宇宙飛行士">
               </div>
             </div>
           </div>
@@ -261,7 +271,7 @@
     async function connectToMoon(hostId) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        const mobilePeer = new Peer();
+        const mobilePeer = new Peer(peerConfig);
 
         mobilePeer.on('open', () => {
           document.getElementById('status').innerText = "📡 月面基地へ送信中...";
