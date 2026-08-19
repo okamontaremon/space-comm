@@ -172,6 +172,7 @@
     let delaySeconds = 3.0;
     let frameBuffer = [];
     let isDelayRunning = false;
+    let audioCtx, delayNode;
 
     const peerConfig = {
       config: {
@@ -185,6 +186,10 @@
     function setDelay(sec, btn) {
       delaySeconds = sec;
       frameBuffer = [];
+      
+      if (delayNode) {
+        delayNode.delayTime.value = delaySeconds;
+      }
       
       document.querySelectorAll('.btn-delay').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
@@ -226,12 +231,33 @@
             vid.srcObject = remoteStream;
             vid.play().then(() => {
               startDelayProcess('remoteVideo', 'delayCanvas');
+              setupAudioDelay(remoteStream);
             }).catch(e => console.error("再生エラー:", e));
           });
         });
 
       } catch (err) {
         alert("カメラ/マイクの許可が必要です: " + err);
+      }
+    }
+
+    function setupAudioDelay(stream) {
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        
+        const source = audioCtx.createMediaStreamSource(stream);
+        delayNode = audioCtx.createDelay(15.0); // 最大15秒遅延
+        delayNode.delayTime.value = delaySeconds;
+
+        source.connect(delayNode);
+        delayNode.connect(audioCtx.destination);
+      } catch (e) {
+        console.error("音声遅延エラー:", e);
       }
     }
 
@@ -308,6 +334,7 @@
             vid.srcObject = remoteStream;
             vid.play().then(() => {
               startDelayProcess('remoteVideo', 'delayCanvas');
+              setupAudioDelay(remoteStream);
             }).catch(e => console.error("再生エラー:", e));
           });
         });
