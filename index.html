@@ -99,6 +99,15 @@
       box-shadow: inset 0 0 10px rgba(0,0,0,0.6);
     }
 
+    /* バックグラウンド動作用の隠しビデオ要素 */
+    .hidden-video {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
     #qrcode {
       display: flex;
       justify-content: center;
@@ -143,7 +152,7 @@
 
   <div class="main-container">
     <div class="video-card">
-      <h3>【月面パイロット (自分)】</h3>
+      <h3>【月面パイロット (自分・リアルタイム)】</h3>
       <div class="panel-frame">
         <video id="localVideo" class="face-video" autoplay playsinline muted></video>
         <img src="astronaut.png" class="astronaut-img" alt="宇宙飛行士">
@@ -152,10 +161,8 @@
     <div class="video-card">
       <h3 id="remote-title">【地球（相手）からの映像 - 3秒遅延】</h3>
       <div class="panel-frame" style="background:#000;">
-        <!-- 遅延描画用のキャンバス -->
         <canvas id="delayCanvas" style="width:100%; height:100%; object-fit:cover;"></canvas>
-        <!-- 非表示の受信用ビデオ -->
-        <video id="remoteVideo" style="display:none;" autoplay playsinline></video>
+        <video id="remoteVideo" class="hidden-video" autoplay playsinline muted></video>
       </div>
     </div>
   </div>
@@ -177,13 +184,20 @@
 
     function setDelay(sec, btn) {
       delaySeconds = sec;
-      frameBuffer = []; // バッファリセット
+      frameBuffer = [];
+      
       document.querySelectorAll('.btn-delay').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       
-      document.getElementById('remote-title').innerText = `【地球（相手）からの映像 - ${sec}秒遅延】`;
+      const remoteTitle = document.getElementById('remote-title');
+      if (remoteTitle) {
+        remoteTitle.innerText = `【地球（相手）からの映像 - ${sec}秒遅延】`;
+      }
+      
       const status = document.getElementById('status');
-      if (status) status.innerText = `通信遅延を ${sec} 秒に変更しました`;
+      if (status) {
+        status.innerText = `⏱️ 通信遅延を【${sec}秒】に切り替えました`;
+      }
     }
 
     async function initHost() {
@@ -198,20 +212,21 @@
           document.getElementById('status').innerText = "🟢 月面基地準備完了！スマホでQRコードを読み取ってください";
           document.getElementById('qr-section').style.display = 'block';
 
-          const clientUrl = `${location.protocol}//${location.host}${location.pathname}?join=${id}&delay=${delaySeconds}`;
+          const clientUrl = `${location.protocol}//${location.host}${location.pathname}?join=${id}`;
           document.getElementById("qrcode").innerHTML = "";
           new QRCode(document.getElementById("qrcode"), { text: clientUrl, width: 160, height: 160 });
         });
 
         peer.on('call', (call) => {
-          document.getElementById('status').innerText = `📡 通信接続！ (${delaySeconds}秒のタイムラグ発生中)`;
+          document.getElementById('status').innerText = "📡 接続完了！通信中...";
           call.answer(localStream);
 
           call.on('stream', (remoteStream) => {
             const vid = document.getElementById('remoteVideo');
             vid.srcObject = remoteStream;
-            vid.play();
-            startDelayProcess('remoteVideo', 'delayCanvas');
+            vid.play().then(() => {
+              startDelayProcess('remoteVideo', 'delayCanvas');
+            }).catch(e => console.error("再生エラー:", e));
           });
         });
 
@@ -220,7 +235,6 @@
       }
     }
 
-    // 映像コマ（フレーム）を蓄積して遅延表示する処理
     function startDelayProcess(videoCtxId, canvasId) {
       if (isDelayRunning) return;
       isDelayRunning = true;
@@ -230,24 +244,21 @@
       const ctx = canvas.getContext('2d');
 
       const processFrame = () => {
-        if (video.videoWidth > 0) {
+        if (video && video.videoWidth > 0) {
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
 
-          // 一時キャンバスに現在のコマを描画
           const tempCanvas = document.createElement('canvas');
           tempCanvas.width = video.videoWidth;
           tempCanvas.height = video.videoHeight;
           const tempCtx = tempCanvas.getContext('2d');
           tempCtx.drawImage(video, 0, 0);
 
-          // コマと時刻を配列に保存
           frameBuffer.push({
             time: Date.now(),
             image: tempCanvas
           });
 
-          // 設定秒数より古いコマを取り出して画面に描画
           const targetTime = Date.now() - (delaySeconds * 1000);
           while (frameBuffer.length > 0 && frameBuffer[0].time <= targetTime) {
             const frame = frameBuffer.shift();
@@ -262,9 +273,6 @@
     window.onload = () => {
       const urlParams = new URLSearchParams(window.location.search);
       const joinId = urlParams.get('join');
-      const paramDelay = urlParams.get('delay');
-
-      if (paramDelay) delaySeconds = parseFloat(paramDelay);
 
       if (joinId) {
         document.body.innerHTML = `
@@ -273,10 +281,10 @@
           <button class="btn" onclick="connectToMoon('${joinId}')">🚀 月面へ接続開始</button>
           <div class="main-container">
             <div class="video-card" style="width:90%;">
-              <h3>【月面宇宙飛行士からの映像 - ${delaySeconds}秒遅延】</h3>
+              <h3>【月面宇宙飛行士からの映像】</h3>
               <div class="panel-frame">
                 <canvas id="delayCanvas" class="face-video"></canvas>
-                <video id="remoteVideo" style="display:none;" autoplay playsinline></video>
+                <video id="remoteVideo" class="hidden-video" autoplay playsinline muted></video>
                 <img src="astronaut.png" class="astronaut-img" alt="宇宙飛行士">
               </div>
             </div>
@@ -295,11 +303,12 @@
           const call = mobilePeer.call(hostId, stream);
 
           call.on('stream', (remoteStream) => {
-            document.getElementById('status').innerText = `🟢 月面基地と接続完了！ (${delaySeconds}秒遅延中)`;
+            document.getElementById('status').innerText = "🟢 月面基地と接続完了！";
             const vid = document.getElementById('remoteVideo');
             vid.srcObject = remoteStream;
-            vid.play();
-            startDelayProcess('remoteVideo', 'delayCanvas');
+            vid.play().then(() => {
+              startDelayProcess('remoteVideo', 'delayCanvas');
+            }).catch(e => console.error("再生エラー:", e));
           });
         });
       } catch(e) {
