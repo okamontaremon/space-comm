@@ -64,22 +64,17 @@
       box-sizing: border-box;
     }
     
-    /* -------------------------------------------------- */
-    /* オリジナル画像を使った「顔はめパネル」コンテナ */
-    /* -------------------------------------------------- */
     .panel-frame {
       position: relative;
       width: 100%;
       aspect-ratio: 4/3;
       overflow: hidden;
       border-radius: 8px;
-      /* 月面背景画像を敷く */
       background-image: url('moon.png');
       background-size: cover;
       background-position: center;
     }
 
-    /* 宇宙飛行士のイラスト */
     .astronaut-img {
       position: absolute;
       bottom: -10%;
@@ -91,18 +86,16 @@
       pointer-events: none;
     }
 
-    /* ヘルメットのバイザー（オレンジ部分）に重なる丸型カメラ映像 */
     .face-video {
       position: absolute;
-      /* バイザーの位置調整 */
       top: 23%;
       left: 50%;
       transform: translateX(-50%);
       width: 46%;
       height: 38%;
       object-fit: cover;
-      border-radius: 50% / 45%; /* バイザーに合わせて少し横長の楕円に */
-      z-index: 2; /* イラストの上に重ねる */
+      border-radius: 50% / 45%;
+      z-index: 2;
       box-shadow: inset 0 0 10px rgba(0,0,0,0.6);
     }
 
@@ -153,14 +146,12 @@
     <div class="video-card">
       <h3>【月面パイロット (自分)】</h3>
       <div class="panel-frame">
-        <!-- バイザーの位置にカメラ映像を丸く重ねる -->
         <video id="localVideo" class="face-video" autoplay playsinline muted></video>
-        <!-- 宇宙飛行士のイラスト -->
         <img src="astronaut.png" class="astronaut-img" alt="宇宙飛行士">
       </div>
     </div>
     <div class="video-card">
-      <h3 id="remote-title">【地球（相手）からの映像 - 3秒遅延】</h3>
+      <h3 id="remote-title">【地球（相手）からの映像】</h3>
       <div class="panel-frame" style="background:#000;">
         <video id="remoteVideo" style="width:100%; height:100%; object-fit:cover;" autoplay playsinline></video>
       </div>
@@ -209,36 +200,19 @@
         });
 
         peer.on('call', (call) => {
-          document.getElementById('status').innerText = `📡 地球からの通信を受信中...（${delaySeconds}秒遅延適用）`;
+          document.getElementById('status').innerText = "📡 接続成功！通信中...";
           call.answer(localStream);
 
           call.on('stream', (remoteStream) => {
-            setupDelayedStream(remoteStream, 'remoteVideo');
+            // 直接映像を表示させてフリーズを回避
+            const vid = document.getElementById('remoteVideo');
+            vid.srcObject = remoteStream;
           });
         });
 
       } catch (err) {
         alert("カメラ/マイクの許可が必要です: " + err);
       }
-    }
-
-    function setupDelayedStream(stream, videoElementId) {
-      const recorder = new MediaRecorder(stream);
-      let chunks = [];
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunks.push(e.data);
-          const blob = new Blob(chunks, { type: 'video/webm' });
-          const url = URL.createObjectURL(blob);
-          
-          setTimeout(() => {
-            const vid = document.getElementById(videoElementId);
-            vid.src = url;
-          }, delaySeconds * 1000);
-        }
-      };
-      recorder.start(200);
     }
 
     window.onload = () => {
@@ -257,7 +231,7 @@
           <button class="btn" onclick="connectToMoon('${joinId}')">🚀 月面へ接続開始</button>
           <div class="main-container">
             <div class="video-card" style="width:90%;">
-              <h3>【月面宇宙飛行士からの映像 - ${delaySeconds}秒遅延】</h3>
+              <h3>【月面宇宙飛行士からの映像】</h3>
               <div class="panel-frame">
                 <video id="remoteVideo" class="face-video" autoplay playsinline></video>
                 <img src="astronaut.png" class="astronaut-img" alt="宇宙飛行士">
@@ -274,11 +248,13 @@
         const mobilePeer = new Peer(peerConfig);
 
         mobilePeer.on('open', () => {
-          document.getElementById('status').innerText = "📡 月面基地へ送信中...";
+          document.getElementById('status').innerText = "📡 接続中...";
           const call = mobilePeer.call(hostId, stream);
 
           call.on('stream', (remoteStream) => {
-            setupDelayedStream(remoteStream, 'remoteVideo');
+            document.getElementById('status').innerText = "🟢 月面基地と接続しました！";
+            const vid = document.getElementById('remoteVideo');
+            vid.srcObject = remoteStream;
           });
         });
       } catch(e) {
