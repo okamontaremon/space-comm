@@ -16,15 +16,15 @@
       padding: 15px;
     }
     .header {
-      font-size: 26px;
+      font-size: 24px;
       font-weight: bold;
-      letter-spacing: 3px;
+      letter-spacing: 2px;
       text-shadow: 0 0 10px #00f3ff;
       border-bottom: 2px solid #00f3ff;
       padding-bottom: 10px;
       margin-bottom: 15px;
     }
-    .status-box { font-size: 15px; color: #ffb700; margin-bottom: 15px; }
+    .status-box { font-size: 14px; color: #ffb700; margin-bottom: 15px; }
     
     .delay-control {
       background: rgba(10, 25, 47, 0.8);
@@ -52,16 +52,31 @@
       box-shadow: 0 0 8px #00f3ff;
     }
 
-    .main-container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
+    .main-container { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; }
     .video-card {
       background: rgba(10, 25, 47, 0.9);
       border: 2px solid #00f3ff;
       border-radius: 10px;
-      padding: 15px;
+      padding: 10px;
       width: 45%;
-      min-width: 320px;
+      min-width: 300px;
       box-shadow: 0 0 15px rgba(0,243,255,0.2);
       box-sizing: border-box;
+    }
+
+    /* スマホ画面用のレイアウト調整 */
+    .mobile-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+      width: 100%;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    .mobile-card {
+      width: 100%;
+      min-width: unset;
     }
     
     .panel-frame {
@@ -76,14 +91,12 @@
       border: 1px solid #00f3ff;
     }
 
-    /* 映像を大きく表示するための全画面設定 */
     .full-video {
       width: 100%;
       height: 100%;
       object-fit: cover;
     }
 
-    /* バックグラウンド動作用の隠しビデオ要素 */
     .hidden-video {
       position: absolute;
       width: 1px;
@@ -288,9 +301,17 @@
           <div class="header">🌍 地球通信局 (EARTH STATION)</div>
           <div id="status" class="status-box">月面基地へ接続準備中...</div>
           <button class="btn" onclick="connectToMoon('${joinId}')">🚀 月面へ接続開始</button>
-          <div class="main-container">
-            <div class="video-card" style="width:90%;">
-              <h3>【月面宇宙飛行士からの映像】</h3>
+          
+          <div class="mobile-container">
+            <div class="video-card mobile-card">
+              <h3 style="font-size:14px; margin:5px 0;">【地球オペレーター (自分・リアルタイム)】</h3>
+              <div class="panel-frame" style="background:#000;">
+                <video id="mobileLocalVideo" class="full-video" autoplay playsinline muted></video>
+              </div>
+            </div>
+            
+            <div class="video-card mobile-card">
+              <h3 style="font-size:14px; margin:5px 0;">【月面（相手）からの映像 - 遅延表示】</h3>
               <div class="panel-frame">
                 <canvas id="delayCanvas" class="full-video"></canvas>
                 <video id="remoteVideo" class="hidden-video" autoplay playsinline muted></video>
@@ -304,6 +325,13 @@
     async function connectToMoon(hostId) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        
+        // スマホ側の自分の映像を表示
+        const mobileLocalVideo = document.getElementById('mobileLocalVideo');
+        if (mobileLocalVideo) {
+          mobileLocalVideo.srcObject = stream;
+        }
+
         const mobilePeer = new Peer(peerConfig);
 
         mobilePeer.on('open', () => {
